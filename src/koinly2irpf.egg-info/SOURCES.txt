@@ -1,0 +1,10 @@
+README.md
+setup.py
+src/koinly2irpf/__init__.py
+src/koinly2irpf/fix_binance_smart_chain.py
+src/koinly2irpf.egg-info/PKG-INFO
+src/koinly2irpf.egg-info/SOURCES.txt
+src/koinly2irpf.egg-info/dependency_links.txt
+src/koinly2irpf.egg-info/entry_points.txt
+src/koinly2irpf.egg-info/requires.txt
+src/koinly2irpf.egg-info/top_level.txt

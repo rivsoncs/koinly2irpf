@@ -1,0 +1,140 @@
+Metadata-Version: 2.4
+Name: koinly2irpf
+Version: 0.1.0
+Summary: Conversor de relatórios Koinly para IRPF brasileiro
+Home-page: https://github.com/rivsoncs/koinly2irpf
+Author: RIVSON DE CASTRO E SOUZA
+Author-email: 
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: pdfplumber
+Requires-Dist: pandas
+Requires-Dist: pathlib
+Requires-Dist: python-dotenv
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# Reports to IRPF
+
+Conversor de relatórios financeiros do Koinly para formato compatível com a declaração do Imposto de Renda Pessoa Física (IRPF) brasileira.
+
+## Funcionalidades
+
+- Processa relatórios PDF do Koinly ("Balances per Wallet")
+- Extrai informações de criptomoedas, incluindo ticker, quantidade e valor
+- Identifica automaticamente exchanges, carteiras e redes blockchain
+- Extrai endereços de wallets e formata conforme exigido pela Receita Federal
+- Gera um único arquivo CSV pronto para importação no programa da DIRPF
+
+## Requisitos
+
+- Python 3.8 ou superior
+- pip (gerenciador de pacotes Python)
+
+## Instalação
+
+### Método 1: Instalação via GitHub (Recomendado)
+
+```bash
+pip install git+https://github.com/seu-usuario/Reports-to-IRPF.git
+```
+
+Após a instalação, o comando `reports-to-irpf` estará disponível no terminal.
+
+### Método 2: Execução direta (Sem instalação)
+
+```bash
+# Clone o repositório
+git clone https://github.com/seu-usuario/Reports-to-IRPF.git
+cd Reports-to-IRPF
+
+# Execute o script diretamente
+python process_report.py caminho/para/seu/relatorio.pdf
+```
+
+### Método 3: Instalação para desenvolvimento
+
+```bash
+# Clone o repositório
+git clone https://github.com/seu-usuario/Reports-to-IRPF.git
+cd Reports-to-IRPF
+
+# Instale em modo de desenvolvimento
+pip install -e .
+```
+
+## Uso
+
+### Após instalação via pip (Método 1)
+
+```bash
+reports-to-irpf caminho/para/seu/relatorio.pdf
+```
+
+### Execução direta (Método 2)
+
+```bash
+python process_report.py caminho/para/seu/relatorio.pdf
+```
+
+### Exemplos
+
+```bash
+# Processar um relatório específico
+reports-to-irpf ~/Downloads/koinly_2024_balances_per_wallet.pdf
+
+# Passar caminho absoluto com espaços (use aspas)
+reports-to-irpf "C:\Users\Usuario\Meus Documentos\koinly_2024_balances_per_wallet.pdf"
+
+# Executar diretamente (sem instalação)
+python process_report.py Exemplos-Reports/koinly_2024_balances_per_wallet.pdf
+```
+
+## Saída
+
+O programa gera um arquivo CSV no **mesmo diretório** do arquivo PDF processado, contendo:
+
+- **Ticker:** Símbolo da criptomoeda (Ex: BTC, ETH, SOL)
+- **Qtd:** Quantidade da criptomoeda
+- **Valor R$ 31/12/YYYY:** Valor em Reais na data de 31/12 do ano do relatório
+- **Discriminação:** Descrição detalhada no formato exigido pela Receita Federal
+  - Inclui identificação de carteira/exchange
+  - Especifica rede blockchain quando disponível
+  - Mostra parte do endereço da wallet quando disponível
+- **Cnpj:** Campo vazio para preenchimento manual se necessário
+
+## Estrutura do Projeto
+
+- `src/`: Código fonte do projeto
+  - `src/main.py`: Ponto de entrada principal
+  - `src/koinly_processor.py`: Lógica de processamento dos relatórios
+- `process_report.py`: Script para execução direta sem instalação
+- `setup.py`: Configuração para instalação via pip
+- `requirements.txt`: Dependências do projeto
+
+## Ajuda
+
+Execute o comando com a flag `--help` para ver as opções disponíveis:
+
+```bash
+reports-to-irpf --help
+```
+
+## Contribuição
+
+Contribuições são bem-vindas! Para contribuir:
+
+1. Faça um fork do repositório
+2. Crie uma branch para sua feature (`git checkout -b feature/nova-funcionalidade`)
+3. Commit suas mudanças (`git commit -am 'Adiciona nova funcionalidade'`)
+4. Push para a branch (`git push origin feature/nova-funcionalidade`)
+5. Crie um Pull Request 

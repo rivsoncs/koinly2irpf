@@ -1,0 +1,2 @@
+[console_scripts]
+koinly2irpf = src.main:main
