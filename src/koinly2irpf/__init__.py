@@ -1,5 +1,8 @@
 """
-Module for fixing and improving Koinly processing for IRPF.
+Koinly2IRPF - Conversor de relatórios Koinly para IRPF brasileiro.
+
+Este pacote processa relatórios do Koinly e os converte para um formato
+compatível com a declaração de Imposto de Renda de Pessoa Física (IRPF) no Brasil.
 """
 
 # Import the BSC fix module to make it available

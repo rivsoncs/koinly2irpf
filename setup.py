@@ -15,8 +15,9 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/rivsoncs/koinly2irpf",
-    packages=find_packages(where="src"),
+    packages=find_packages(where="src") + ["src"],
     package_dir={"": "src"},
+    include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
@@ -31,7 +32,8 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "koinly2irpf=src.main:main",
+            "koinly2irpf=koinly2irpf.main_entry:main",
+            "koinly2irpf-legacy=koinly2irpf.wrapper:run_main",
         ],
     },
 ) 
