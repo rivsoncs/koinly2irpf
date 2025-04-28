@@ -31,7 +31,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "koinly2irpf=src.main:main",
+            "koinly2irpf=koinly2irpf.wrapper:run_main",
         ],
     },
 ) 
