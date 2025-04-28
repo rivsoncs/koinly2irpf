@@ -111,4 +111,26 @@ dmypy.json
 Exemplos-Reports/
 instructions.txt
 update_instructions.txt
-"ersrivsoDocumentsRepositóriosReports-to-IRPF" 
+"ersrivsoDocumentsRepositóriosReports-to-IRPF"
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.pyo
+
+# Backup
+debug/
+backup/
+
+# Testes e scripts temporários
+test_*.py
+test_reports/
+
+# Relatórios e arquivos de exemplo
+Exemplos-Reports/
+*.pdf
+*.csv
+
+# Outros
+.DS_Store 
