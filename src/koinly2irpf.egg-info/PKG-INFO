@@ -23,9 +23,11 @@ Dynamic: requires-dist
 Dynamic: requires-python
 Dynamic: summary
 
-# Reports to IRPF
+# Koinly2IRPF
 
-Conversor de relatórios financeiros do Koinly para formato compatível com a declaração do Imposto de Renda Pessoa Física (IRPF) brasileira.
+Conversor de relatórios Koinly para IRPF brasileiro.
+
+Este pacote processa relatórios do Koinly e os converte para um formato compatível com a declaração de Imposto de Renda de Pessoa Física (IRPF) no Brasil.
 
 ## Funcionalidades
 
@@ -42,82 +44,88 @@ Conversor de relatórios financeiros do Koinly para formato compatível com a de
 
 ## Instalação
 
-### Método 1: Instalação via GitHub (Recomendado)
+### Método Recomendado (Usando o Script de Instalação)
+
+A maneira mais fácil de instalar este pacote é usando o script de instalação fornecido:
+
+1. Faça o download do script `install.py` deste repositório
+2. Execute o script no terminal:
 
 ```bash
-pip install git+https://github.com/seu-usuario/Reports-to-IRPF.git
+python install.py
 ```
 
-Após a instalação, o comando `reports-to-irpf` estará disponível no terminal.
+Este script desinstalará qualquer versão anterior do pacote, limpará o cache do pip e instalará a versão mais recente diretamente do GitHub.
 
-### Método 2: Execução direta (Sem instalação)
+### Instalação Manual
 
-```bash
-# Clone o repositório
-git clone https://github.com/seu-usuario/Reports-to-IRPF.git
-cd Reports-to-IRPF
-
-# Execute o script diretamente
-python process_report.py caminho/para/seu/relatorio.pdf
-```
-
-### Método 3: Instalação para desenvolvimento
+Se preferir instalar manualmente, execute os seguintes comandos:
 
 ```bash
-# Clone o repositório
-git clone https://github.com/seu-usuario/Reports-to-IRPF.git
-cd Reports-to-IRPF
+# Desinstala versões anteriores
+pip uninstall -y koinly2irpf
 
-# Instale em modo de desenvolvimento
-pip install -e .
+# Limpa o cache do pip
+pip cache purge
+
+# Instala a versão mais recente
+pip install --no-cache-dir --force-reinstall git+https://github.com/rivsoncs/koinly2irpf.git
 ```
 
 ## Uso
 
-### Após instalação via pip (Método 1)
+Após a instalação, você pode usar o comando `koinly2irpf` para processar seus relatórios:
 
 ```bash
-reports-to-irpf caminho/para/seu/relatorio.pdf
+# Processar um único arquivo
+koinly2irpf caminho/para/seu/relatorio.pdf
+
+# Processar todos os arquivos PDF em um diretório
+koinly2irpf --dir caminho/para/diretorio
 ```
 
-### Execução direta (Método 2)
+## Solução de Problemas
 
-```bash
-python process_report.py caminho/para/seu/relatorio.pdf
-```
+### Erro "No module named 'src'"
 
-### Exemplos
+Se encontrar o erro `ModuleNotFoundError: No module named 'src'`, isso indica um problema com a instalação do pacote. Para resolver:
 
-```bash
-# Processar um relatório específico
-reports-to-irpf ~/Downloads/koinly_2024_balances_per_wallet.pdf
+1. Execute o script `install.py` fornecido:
+   ```bash
+   python install.py
+   ```
 
-# Passar caminho absoluto com espaços (use aspas)
-reports-to-irpf "C:\Users\Usuario\Meus Documentos\koinly_2024_balances_per_wallet.pdf"
+2. Ou reinstale manualmente:
+   ```bash
+   pip uninstall -y koinly2irpf
+   pip cache purge
+   pip install --no-cache-dir --force-reinstall git+https://github.com/rivsoncs/koinly2irpf.git
+   ```
 
-# Executar diretamente (sem instalação)
-python process_report.py Exemplos-Reports/koinly_2024_balances_per_wallet.pdf
-```
+### Comando não encontrado
 
-## Saída
+Se o comando `koinly2irpf` não estiver disponível após a instalação:
 
-O programa gera um arquivo CSV no **mesmo diretório** do arquivo PDF processado, contendo:
+1. Verifique se o Python está no seu PATH
+2. Reinstale o pacote usando uma das opções acima
+3. Tente usar o Python diretamente:
+   ```bash
+   python -m koinly2irpf.main_entry seu_relatorio.pdf
+   ```
 
-- **Ticker:** Símbolo da criptomoeda (Ex: BTC, ETH, SOL)
-- **Qtd:** Quantidade da criptomoeda
-- **Valor R$ 31/12/YYYY:** Valor em Reais na data de 31/12 do ano do relatório
-- **Discriminação:** Descrição detalhada no formato exigido pela Receita Federal
-  - Inclui identificação de carteira/exchange
-  - Especifica rede blockchain quando disponível
-  - Mostra parte do endereço da wallet quando disponível
-- **Cnpj:** Campo vazio para preenchimento manual se necessário
+## Contribuindo
+
+Contribuições são bem-vindas! Se encontrar algum problema ou tiver sugestões de melhorias, sinta-se à vontade para abrir uma issue ou enviar um pull request.
+
+## Licença
+
+Este projeto está licenciado sob a Licença MIT. Consulte o arquivo `LICENSE` para obter mais detalhes.
 
 ## Estrutura do Projeto
 
-- `src/`: Código fonte do projeto
-  - `src/main.py`: Ponto de entrada principal
-  - `src/koinly_processor.py`: Lógica de processamento dos relatórios
-- `process_report.py`: Script para execução direta sem instalação
+- `koinly2irpf/`: Código fonte do projeto
+  - `koinly2irpf/cli.py`: Ponto de entrada principal
+  - `koinly2irpf/processor.py`: Lógica de processamento dos relatórios
 - `setup.py`: Configuração para instalação via pip
 - `requirements.txt`: Dependências do projeto
 
@@ -126,15 +134,5 @@ O programa gera um arquivo CSV no **mesmo diretório** do arquivo PDF processado
 Execute o comando com a flag `--help` para ver as opções disponíveis:
 
 ```bash
-reports-to-irpf --help
-```
-
-## Contribuição
-
-Contribuições são bem-vindas! Para contribuir:
-
-1. Faça um fork do repositório
-2. Crie uma branch para sua feature (`git checkout -b feature/nova-funcionalidade`)
-3. Commit suas mudanças (`git commit -am 'Adiciona nova funcionalidade'`)
-4. Push para a branch (`git push origin feature/nova-funcionalidade`)
-5. Crie um Pull Request 
+koinly2irpf --help
+``` 

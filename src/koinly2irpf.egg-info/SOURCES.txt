@@ -1,7 +1,12 @@
 README.md
 setup.py
 src/koinly2irpf/__init__.py
+src/koinly2irpf/cli.py
 src/koinly2irpf/fix_binance_smart_chain.py
+src/koinly2irpf/main_cli.py
+src/koinly2irpf/main_entry.py
+src/koinly2irpf/processor.py
+src/koinly2irpf/wrapper.py
 src/koinly2irpf.egg-info/PKG-INFO
 src/koinly2irpf.egg-info/SOURCES.txt
 src/koinly2irpf.egg-info/dependency_links.txt
