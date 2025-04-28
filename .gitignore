@@ -108,7 +108,7 @@ venv.bak/
 dmypy.json
 
 # Arquivos temporários e específicos do projeto
-Exemplos-Reports/*.csv
+Exemplos-Reports/
 instructions.txt
 update_instructions.txt
 "ersrivsoDocumentsRepositóriosReports-to-IRPF" 
