@@ -15,7 +15,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/rivsoncs/koinly2irpf",
-    packages=find_packages(where="src") + ["src"],
+    packages=find_packages(where="src"),
     package_dir={"": "src"},
     include_package_data=True,
     classifiers=[
