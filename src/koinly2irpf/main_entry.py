@@ -37,47 +37,19 @@ def main():
     args = parser.parse_args()
     
     try:
-        # Tentamos diferentes abordagens para importar o KoinlyProcessor
-        processor_imported = False
-        
-        # Estratégia 1: Importar do módulo processor no mesmo pacote
+        # Importar o KoinlyProcessor
         try:
-            from .processor import KoinlyProcessor
+            from koinly2irpf.processor import KoinlyProcessor
             logger.info("Usando KoinlyProcessor do pacote koinly2irpf.processor")
-            processor_imported = True
-        except (ImportError, SystemError):
-            pass
-        
-        # Estratégia 2: Importar diretamente 
-        if not processor_imported:
+        except ImportError:
             try:
-                from koinly2irpf.processor import KoinlyProcessor
-                logger.info("Usando KoinlyProcessor do pacote koinly2irpf.processor")
-                processor_imported = True
+                from processor import KoinlyProcessor
+                logger.info("Usando KoinlyProcessor do módulo local processor")
             except ImportError:
-                pass
-        
-        # Estratégia 3: Tentar importar da estrutura legada
-        if not processor_imported:
-            # Adiciona o diretório src ao path para permitir importação
-            import site
-            site_packages = site.getsitepackages()
-            for site_pkg in site_packages:
-                src_path = os.path.join(site_pkg, 'src')
-                if os.path.exists(src_path) and src_path not in sys.path:
-                    sys.path.insert(0, src_path)
-            
-            try:
-                from koinly_processor import KoinlyProcessor
-                logger.info("Usando KoinlyProcessor do módulo legado")
-                processor_imported = True
-            except ImportError:
-                pass
-        
-        # Se todas as tentativas falharem
-        if not processor_imported:
-            logger.error("Não foi possível importar o KoinlyProcessor. Verifique a instalação do pacote.")
-            return 1
+                logger.error("Não foi possível importar o KoinlyProcessor. Verifique a instalação do pacote.")
+                print("ERRO: Estrutura de pacote inválida. Por favor, reinstale o pacote.")
+                print("Comando: pip uninstall -y koinly2irpf && pip install git+https://github.com/rivsoncs/koinly2irpf.git")
+                return 1
         
         # Processamento do arquivo ou diretório
         if args.file:
