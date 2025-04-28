@@ -45,6 +45,32 @@ pip install -e .
 
 ---
 
+## Atualização
+
+Para atualizar para a versão mais recente diretamente do GitHub, execute:
+
+```bash
+pip install --upgrade git+https://github.com/rivsoncs/koinly2irpf.git
+```
+
+Se quiser forçar a reinstalação (útil para desenvolvedores):
+
+```bash
+pip install --force-reinstall --no-cache-dir git+https://github.com/rivsoncs/koinly2irpf.git
+```
+
+---
+
+## Desinstalação
+
+Para remover o pacote do seu ambiente Python, execute:
+
+```bash
+pip uninstall koinly2irpf
+```
+
+---
+
 ## Uso
 
 ### Processar um único arquivo PDF
