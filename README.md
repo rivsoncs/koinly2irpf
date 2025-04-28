@@ -118,4 +118,12 @@ Contribuições são bem-vindas! Se encontrar algum problema ou tiver sugestões
 
 ## Licença
 
-MIT 
+MIT
+
+---
+
+## Aviso Legal
+
+Este software é fornecido "no estado em que se encontra", sem garantias de qualquer tipo. O autor não se responsabiliza por eventuais erros, omissões ou prejuízos decorrentes do uso deste programa. **O usuário é responsável por revisar cuidadosamente o resultado final e garantir a conformidade das informações declaradas junto à Receita Federal.**
+
+Sempre confira os dados gerados antes de enviar sua declaração. 
