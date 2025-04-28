@@ -20,28 +20,28 @@ Conversor de relatórios financeiros do Koinly para formato compatível com a de
 ### Método 1: Instalação via GitHub (Recomendado)
 
 ```bash
-pip install git+https://github.com/seu-usuario/Reports-to-IRPF.git
+pip install git+https://github.com/rivsoncs/koinly2irpf.git
 ```
 
-Após a instalação, o comando `reports-to-irpf` estará disponível no terminal.
+Após a instalação, o comando `koinly2irpf` estará disponível no terminal.
 
 ### Método 2: Execução direta (Sem instalação)
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/Reports-to-IRPF.git
-cd Reports-to-IRPF
+git clone https://github.com/rivsoncs/koinly2irpf.git
+cd koinly2irpf
 
 # Execute o script diretamente
-python process_report.py caminho/para/seu/relatorio.pdf
+python -m koinly2irpf.cli caminho/para/seu/relatorio.pdf
 ```
 
 ### Método 3: Instalação para desenvolvimento
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/Reports-to-IRPF.git
-cd Reports-to-IRPF
+git clone https://github.com/rivsoncs/koinly2irpf.git
+cd koinly2irpf
 
 # Instale em modo de desenvolvimento
 pip install -e .
@@ -52,26 +52,26 @@ pip install -e .
 ### Após instalação via pip (Método 1)
 
 ```bash
-reports-to-irpf caminho/para/seu/relatorio.pdf
+koinly2irpf caminho/para/seu/relatorio.pdf
 ```
 
 ### Execução direta (Método 2)
 
 ```bash
-python process_report.py caminho/para/seu/relatorio.pdf
+python -m koinly2irpf.cli caminho/para/seu/relatorio.pdf
 ```
 
 ### Exemplos
 
 ```bash
 # Processar um relatório específico
-reports-to-irpf ~/Downloads/koinly_2024_balances_per_wallet.pdf
+koinly2irpf ~/Downloads/koinly_2024_balances_per_wallet.pdf
 
 # Passar caminho absoluto com espaços (use aspas)
-reports-to-irpf "C:\Users\Usuario\Meus Documentos\koinly_2024_balances_per_wallet.pdf"
+koinly2irpf "C:\Users\Usuario\Meus Documentos\koinly_2024_balances_per_wallet.pdf"
 
 # Executar diretamente (sem instalação)
-python process_report.py Exemplos-Reports/koinly_2024_balances_per_wallet.pdf
+python -m koinly2irpf.cli Exemplos-Reports/koinly_2024_balances_per_wallet.pdf
 ```
 
 ## Saída
@@ -89,10 +89,9 @@ O programa gera um arquivo CSV no **mesmo diretório** do arquivo PDF processado
 
 ## Estrutura do Projeto
 
-- `src/`: Código fonte do projeto
-  - `src/main.py`: Ponto de entrada principal
-  - `src/koinly_processor.py`: Lógica de processamento dos relatórios
-- `process_report.py`: Script para execução direta sem instalação
+- `koinly2irpf/`: Código fonte do projeto
+  - `koinly2irpf/cli.py`: Ponto de entrada principal
+  - `koinly2irpf/processor.py`: Lógica de processamento dos relatórios
 - `setup.py`: Configuração para instalação via pip
 - `requirements.txt`: Dependências do projeto
 
@@ -101,7 +100,7 @@ O programa gera um arquivo CSV no **mesmo diretório** do arquivo PDF processado
 Execute o comando com a flag `--help` para ver as opções disponíveis:
 
 ```bash
-reports-to-irpf --help
+koinly2irpf --help
 ```
 
 ## Contribuição
@@ -121,7 +120,7 @@ Contribuições são bem-vindas! Para contribuir:
 Se você já tem o software instalado via pip e deseja atualizar para a versão mais recente:
 
 ```bash
-pip install --upgrade git+https://github.com/seu-usuario/Reports-to-IRPF.git
+pip install --upgrade git+https://github.com/rivsoncs/koinly2irpf.git
 ```
 
 ### Atualização da versão de desenvolvimento
@@ -130,7 +129,7 @@ Se você instalou o software em modo de desenvolvimento:
 
 ```bash
 # Navegue até o diretório do repositório
-cd Reports-to-IRPF
+cd koinly2irpf
 
 # Atualize o código fonte
 git pull
@@ -144,7 +143,7 @@ git pull
 ### Desinstalar versão instalada via pip
 
 ```bash
-pip uninstall reports-to-irpf
+pip uninstall koinly2irpf
 ```
 
 ### Remover completamente (incluindo repositório local)
@@ -153,12 +152,12 @@ Se você clonou o repositório:
 
 ```bash
 # Desinstale o pacote primeiro (se instalado)
-pip uninstall reports-to-irpf
+pip uninstall koinly2irpf
 
 # Depois, remova o diretório do repositório
 # No Windows:
-rmdir /s /q Reports-to-IRPF
+rmdir /s /q koinly2irpf
 
 # No Linux/macOS:
-rm -rf Reports-to-IRPF
+rm -rf koinly2irpf
 ``` 
