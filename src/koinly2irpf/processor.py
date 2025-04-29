@@ -14,6 +14,7 @@ import pdfplumber
 import locale
 import traceback
 import csv
+from decimal import Decimal, InvalidOperation
 
 # Import the fix_binance_smart_chain module
 try:
@@ -435,7 +436,8 @@ class KoinlyProcessor:
                                  continue
                         # Use .get with default '0' for safety
                         asset_value = float(self._clean_numeric_str(data.get('value', '0'), remove_currency=True))
-                        asset_amount_str = self._clean_numeric_str(data.get('amount', '0'), remove_currency=False)
+                        asset_amount_raw = data.get('amount', '0').strip()
+                        asset_amount_str = self._clean_numeric_str(asset_amount_raw, remove_currency=False)
                         asset_amount = float(asset_amount_str) if asset_amount_str else 0.0
                         currency_name = data.get('currency', 'Unknown').strip()
                         # Clean up potential NFT names captured in currency field
@@ -445,6 +447,7 @@ class KoinlyProcessor:
                         current_wallet_entry['assets'].append({
                             'name': currency_name,
                             'amount': asset_amount,
+                            'amount_raw': asset_amount_raw,  # valor original como string
                             'value': asset_value,
                         })
                         current_wallet_entry['values'].append(asset_value)
@@ -640,14 +643,19 @@ class KoinlyProcessor:
                 asset_name = asset.get('name', 'Unknown')
                 asset_amount = asset.get('amount', 0)
 
-                # Usar o valor completo, sem truncar casas decimais, e trocar ponto por vírgula
-                amount_str = str(asset_amount).replace('.', ',')
+                # Garante string decimal completa, sem notação científica
+                try:
+                    amount_decimal = Decimal(str(asset_amount))
+                    # Remove notação científica e mantém todas as casas decimais
+                    amount_str = format(amount_decimal, 'f').replace('.', ',')
+                except (InvalidOperation, ValueError):
+                    amount_str = str(asset_amount).replace('.', ',')
 
                 if is_exchange:
                     description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {entity_name} EM 31/12/2024."
                 else:
                     description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {wallet_name} {network_part} EM 31/12/2024."
-                asset['irpf_description'] = description
+                asset['irpf_description'] = description.upper()
 
         logging.info("IRPF descriptions generated")
     
@@ -683,16 +691,20 @@ class KoinlyProcessor:
                     # Formata o valor com vírgula como separador decimal (formato brasileiro)
                     value = asset.get('value', 0)
                     if value < 0.01 and value > 0:
-                        # Valores muito pequenos são mostrados como "0,00"
                         value_str = "0,00"
                     else:
-                        # Formata com 2 casas decimais e substitui ponto por vírgula
                         value_str = f"{value:.2f}".replace('.', ',')
 
-                    # Para cada ativo, criamos uma linha no formato esperado
+                    # Usar sempre o valor original extraído do PDF para Qtd
+                    raw_amount = asset.get('amount_raw')
+                    if raw_amount is not None:
+                        qtd_str = str(raw_amount).replace('.', ',')
+                    else:
+                        qtd_str = str(asset.get('amount', 0)).replace('.', ',')
+
                     assets_rows.append({
                         'Ticker': asset.get('name', ''),
-                        'Qtd': asset.get('amount', 0),
+                        'Qtd': qtd_str,
                         'Valor R$ 31/12/2024': value_str,
                         'Discriminação': asset.get('irpf_description', ''),
                         'Cnpj': ''
@@ -704,7 +716,6 @@ class KoinlyProcessor:
             # Forçar a coluna de valor a ser string para garantir aspas
             if 'Valor R$ 31/12/2024' in self.final_df.columns:
                 self.final_df['Valor R$ 31/12/2024'] = self.final_df['Valor R$ 31/12/2024'].astype(str)
-            # Remover a coluna 'code' se existir
             if 'code' in self.final_df.columns:
                 self.final_df = self.final_df.drop(columns=['code'])
             logging.info(f"Created final DataFrame with shape {self.final_df.shape}")
