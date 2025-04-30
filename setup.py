@@ -34,7 +34,6 @@ setup(
         "console_scripts": [
             "koinly2irpf=koinly2irpf.main_cli:main",
             "koinly2irpf-alt=koinly2irpf.main_entry:main",
-            "koinly2irpf-legacy=koinly2irpf.wrapper:run_main",
         ],
     },
 )

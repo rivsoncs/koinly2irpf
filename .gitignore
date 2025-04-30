@@ -124,7 +124,6 @@ debug/
 backup/
 
 # Testes e scripts temporários
-test_*.py
 test_reports/
 
 # Relatórios e arquivos de exemplo
