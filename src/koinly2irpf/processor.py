@@ -209,8 +209,50 @@ class KoinlyProcessor:
         # Calculate proportional costs
         self._calculate_proportional_cost()
         
-        # Generate IRPF descriptions
-        self._generate_irpf_description()
+        # Generate IRPF descriptions (MOVIDO PARA CÁ)
+        logging.info("Generating IRPF descriptions")
+        for wallet_detail in self.wallet_details:
+            wallet_name = wallet_detail.get('wallet_name', 'Unknown')
+            wallet_name_raw = wallet_detail.get('wallet_name_raw', wallet_name)
+            exchange = wallet_detail.get('exchange', 'NONE')
+            blockchain = wallet_detail.get('blockchain', 'NONE')
+            is_exchange = exchange != 'NONE'
+            is_blockchain = blockchain != 'NONE'
+
+            if is_exchange:
+                custodian_type = "NA EXCHANGE"
+                entity_name = exchange
+                network_part = ""
+            else:
+                custodian_type = "NA CARTEIRA"
+                wallet_address = ""
+                address_match = re.search(r'0x[a-fA-F0-9]{4}', wallet_name_raw)
+                if address_match:
+                    wallet_address = address_match.group(0)
+                if is_blockchain:
+                    network = f"NA REDE {blockchain}"
+                    if wallet_address:
+                        network += f" {wallet_address}"
+                    network_part = network
+                else:
+                    network_part = ""
+
+            for asset in wallet_detail.get('assets', []):
+                asset_name = asset.get('name', 'Unknown') # Obter nome do ticker AQUI
+                asset_amount = asset.get('amount', 0)
+                try:
+                    amount_decimal = Decimal(str(asset_amount))
+                    amount_str = format(amount_decimal, 'f').replace('.', ',')
+                except (InvalidOperation, ValueError):
+                    amount_str = str(asset_amount).replace('.', ',')
+
+                if is_exchange:
+                    description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {entity_name} EM 31/12/2024."
+                else:
+                    description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {wallet_name} {network_part} EM 31/12/2024."
+                asset['irpf_description'] = description.upper()
+        logging.info("IRPF descriptions generated")
+        # FIM DO BLOCO MOVIDO
         
         # Create DataFrames
         self._create_dataframes()
@@ -362,8 +404,8 @@ class KoinlyProcessor:
         # --- Refined Currency Data Pattern --- #
         currency_data_pattern = re.compile(
             r"^"
-            # Group 1: Currency Name/Ticker (allow spaces, hyphens, dots, #, /)
-            r"(?P<currency>[A-Z0-9\/\#\.\s-]+(?:\s*\([^)]+\))?)" # Handle names like "COMETH ITEMS#123..."
+            # Group 1: Currency Name/Ticker (allow spaces, hyphens, dots, #, /) - Changed to non-greedy any character
+            r"(?P<currency>.+?)" # Handle names like "COMETH ITEMS#123..." more generally
             r"\s+"
             # Group 2: Amount (handles standard and scientific notation)
             r"(?P<amount>[\d.,]+(?:[eE][-+]?\d+)?)"
@@ -441,8 +483,9 @@ class KoinlyProcessor:
                         asset_amount = float(asset_amount_str) if asset_amount_str else 0.0
                         currency_name = data.get('currency', 'Unknown').strip()
                         # Clean up potential NFT names captured in currency field
-                        if '#' in currency_name:
-                             currency_name = currency_name.split('#')[0].strip()
+                        # if '#' in currency_name:
+                        #      currency_name = currency_name.split('#')[0].strip()
+                        logging.debug(f"  Line {current_line_num_abs}:      -> Storing asset with name: '{currency_name}'")
 
                         current_wallet_entry['assets'].append({
                             'name': currency_name,
@@ -599,66 +642,6 @@ class KoinlyProcessor:
 
         logging.info("Proportional costs calculated")
     
-    def _generate_irpf_description(self):
-        """Generate IRPF descriptions for each asset."""
-        logging.info("Generating IRPF descriptions")
-
-        # Gera descrições para cada carteira e seus ativos individuais
-        for wallet_detail in self.wallet_details:
-            wallet_name = wallet_detail.get('wallet_name', 'Unknown')
-            wallet_name_raw = wallet_detail.get('wallet_name_raw', wallet_name)
-            exchange = wallet_detail.get('exchange', 'NONE')
-            blockchain = wallet_detail.get('blockchain', 'NONE')
-
-            # Verifica se é um exchange conhecido
-            is_exchange = exchange != 'NONE'
-            is_blockchain = blockchain != 'NONE'
-            is_bsc = blockchain == 'BSC' or 'bsc' in wallet_name_raw.lower()
-
-            # Determina o tipo de custódia e entidade
-            if is_exchange:
-                custodian_type = "NA EXCHANGE"
-                entity_name = exchange
-                network_part = ""
-            else:
-                custodian_type = "NA CARTEIRA"
-
-                # Extrai endereço se presente no nome da carteira
-                wallet_address = ""
-                address_match = re.search(r'0x[a-fA-F0-9]{4}', wallet_name_raw)
-                if address_match:
-                    wallet_address = address_match.group(0)
-                
-                # Se for uma blockchain conhecida, usa como entidade
-                if is_blockchain:
-                    network = f"NA REDE {blockchain}"
-                    if wallet_address:
-                        network += f" {wallet_address}"
-                    network_part = network
-                else:
-                    network_part = ""
-
-            # Para cada ativo, cria uma descrição individual no formato esperado pelo IRPF
-            for asset in wallet_detail.get('assets', []):
-                asset_name = asset.get('name', 'Unknown')
-                asset_amount = asset.get('amount', 0)
-
-                # Garante string decimal completa, sem notação científica
-                try:
-                    amount_decimal = Decimal(str(asset_amount))
-                    # Remove notação científica e mantém todas as casas decimais
-                    amount_str = format(amount_decimal, 'f').replace('.', ',')
-                except (InvalidOperation, ValueError):
-                    amount_str = str(asset_amount).replace('.', ',')
-
-                if is_exchange:
-                    description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {entity_name} EM 31/12/2024."
-                else:
-                    description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {wallet_name} {network_part} EM 31/12/2024."
-                asset['irpf_description'] = description.upper()
-
-        logging.info("IRPF descriptions generated")
-    
     def _create_dataframes(self):
         """Create DataFrames from the processed data."""
         logging.info("Creating DataFrames")
@@ -701,9 +684,12 @@ class KoinlyProcessor:
                         qtd_str = str(raw_amount).replace('.', ',')
                     else:
                         qtd_str = str(asset.get('amount', 0)).replace('.', ',')
+                    
+                    ticker_name = asset.get('name', '') # Log Adicionado - Get name
+                    logging.debug(f"Creating final row for Ticker: '{ticker_name}'") # Log Adicionado - Log name
 
                     assets_rows.append({
-                        'Ticker': asset.get('name', ''),
+                        'Ticker': ticker_name, # Use the logged name
                         'Qtd': qtd_str,
                         'Valor R$ 31/12/2024': value_str,
                         'Discriminação': asset.get('irpf_description', ''),
