@@ -780,6 +780,9 @@ class KoinlyProcessor:
             custo_column_name = f'Custo R$ 31/12/{self.report_year}' # Nome dinâmico e renomeado
             if custo_column_name in self.final_df.columns:
                 self.final_df[custo_column_name] = self.final_df[custo_column_name].astype(str)
+            # Forçar a coluna Qtd a ser string também
+            if 'Qtd' in self.final_df.columns:
+                self.final_df['Qtd'] = self.final_df['Qtd'].astype(str)
             if 'code' in self.final_df.columns:
                 self.final_df = self.final_df.drop(columns=['code'])
             logging.info(f"Created final DataFrame with shape {self.final_df.shape}")
@@ -823,7 +826,7 @@ class KoinlyProcessor:
             if all(col in self.final_df.columns for col in required_columns):
                 # Save the final DataFrame with the correct column order
                 self.final_df[required_columns].to_csv(
-                    final_path, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_NONNUMERIC
+                    final_path, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL
                 )
             else:
                 # If columns are missing, add dummy columns
@@ -833,7 +836,7 @@ class KoinlyProcessor:
                 
                 # Save with the correct column order
                 self.final_df[required_columns].to_csv(
-                    final_path, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_NONNUMERIC
+                    final_path, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL
                 )
                 
             logging.info(f"Final output saved to: {final_path}")
