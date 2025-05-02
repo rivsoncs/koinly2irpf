@@ -15,6 +15,7 @@ import locale
 import traceback
 import csv
 from decimal import Decimal, InvalidOperation
+from datetime import datetime
 
 # Import the fix_binance_smart_chain module
 try:
@@ -51,6 +52,7 @@ class KoinlyProcessor:
         self.wallet_df = None
         self.final_df = None
         self._last_eoy_section_end_index = 0
+        self.report_year = None
 
         # Common Patterns
         self.currency_header_pattern = re.compile(r"^\s*Currency\s+Amount\s+Price\s+Value\s*", re.IGNORECASE | re.DOTALL)
@@ -247,9 +249,9 @@ class KoinlyProcessor:
                     amount_str = str(asset_amount).replace('.', ',')
 
                 if is_exchange:
-                    description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {entity_name} EM 31/12/2024."
+                    description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {entity_name} EM 31/12/{self.report_year}."
                 else:
-                    description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {wallet_name} {network_part} EM 31/12/2024."
+                    description = f"SALDO DE {amount_str} {asset_name} CUSTODIADO {custodian_type} {wallet_name} {network_part} EM 31/12/{self.report_year}."
                 asset['irpf_description'] = description.upper()
         logging.info("IRPF descriptions generated")
         # FIM DO BLOCO MOVIDO
@@ -260,20 +262,70 @@ class KoinlyProcessor:
         logging.info(f"Processing complete for: {self.pdf_path}")
     
     def _extract_text_from_pdf(self):
-        """Extract text from the PDF file."""
+        """Extract text from the PDF file and determine the report year."""
         logging.info(f"Extracting text from PDF: {self.pdf_path}")
         try:
-            all_text = []
+            all_text_pages = []
+            first_page_text = ""
+            year_found = False
+
             with pdfplumber.open(self.pdf_path) as pdf:
-                for page in pdf.pages:
+                # Processar primeira página separadamente para encontrar o ano
+                if pdf.pages:
+                    first_page = pdf.pages[0]
+                    first_page_text = first_page.extract_text()
+                    if first_page_text:
+                        # Procurar pelo padrão do título para extrair o ano
+                        title_match = re.search(r"Balances per Wallet\s+(\d{4})", first_page_text, re.IGNORECASE)
+                        if title_match:
+                            self.report_year = title_match.group(1)
+                            logging.info(f"Report year found in first page title: {self.report_year}")
+                            year_found = True
+                        else:
+                             logging.warning("Year pattern 'Balances per Wallet YYYY' not found on first page.")
+                        all_text_pages.append(first_page_text) # Adicionar texto da primeira página
+
+                # Processar páginas restantes
+                for page in pdf.pages[1:]:
                     text = page.extract_text()
                     if text:
-                        all_text.append(text)
-            
-            self.text = "\n".join(all_text)
-            logging.info(f"Extracted text from {len(all_text)} pages")
+                        all_text_pages.append(text)
+
+            self.text = "\n".join(all_text_pages)
+            logging.info(f"Extracted text from {len(all_text_pages)} pages")
+
+            # Fallback 1: Tentar extrair ano do nome do arquivo
+            if not year_found:
+                filename_match = re.search(r"(\d{4})", self.pdf_path.stem)
+                if filename_match:
+                    self.report_year = filename_match.group(1)
+                    logging.info(f"Report year found in filename: {self.report_year}")
+                    year_found = True
+                else:
+                    logging.warning("Year not found in filename either.")
+
+            # Fallback 2: Usar ano atual se não encontrado
+            if not year_found:
+                current_year = datetime.now().year
+                self.report_year = str(current_year)
+                logging.warning(f"Could not determine report year from PDF title or filename. Defaulting to current year: {self.report_year}")
+            else:
+                # Validar se o ano parece razoável (ex: entre 2010 e ano atual + 1)
+                 try:
+                     year_int = int(self.report_year)
+                     current_year = datetime.now().year
+                     if not (2010 <= year_int <= current_year + 1):
+                          logging.warning(f"Extracted year {self.report_year} seems unusual. Please verify.")
+                 except ValueError:
+                      logging.warning(f"Extracted year '{self.report_year}' is not a valid number. Please verify.")
+
+
         except Exception as e:
-            logging.error(f"Error extracting text from PDF: {str(e)}")
+            logging.error(f"Error extracting text or year from PDF: {str(e)}")
+            # Se der erro na extração, ainda tenta definir um ano padrão
+            if not self.report_year:
+                 self.report_year = str(datetime.now().year)
+                 logging.warning(f"Error during PDF processing, defaulting report year to current year: {self.report_year}")
             raise
     
     def _parse_eoy_section(self):
@@ -334,10 +386,17 @@ class KoinlyProcessor:
             match = eoy_pattern.match(line)
             if match:
                 try:
-                    asset = match.group(1).strip()
-                    if not asset or asset.lower() == 'asset': continue
+                    raw_asset_name = match.group(1).strip()
+                    # Remover a parte entre parênteses e qualquer espaço extra
+                    asset = re.sub(r'\s*\([^)]*\)\s*$', '', raw_asset_name).strip()
+                    # Remover também a descrição de preço (@ R$X.XX per TICKER) se existir
                     asset = re.sub(r'\s*@\s*[R$€£¥].*$', '', asset).strip()
-                    if not asset: continue
+                    
+                    if not asset or asset.lower() == 'asset': 
+                        logging.debug(f"(Old Logic) Pulando linha EOY inválida ou cabeçalho: '{line}'")
+                        continue
+                    
+                    logging.debug(f"(Old Logic) EOY Asset Raw: '{raw_asset_name}' -> Cleaned: '{asset}'")
 
                     quantity_str = match.group(2)
                     cost_str = match.group(3).replace('(', '-').replace(')', '')
@@ -616,23 +675,34 @@ class KoinlyProcessor:
                     for asset in wallet_detail.get('assets', []):
                         asset_cost = 0 # Initialize asset_cost to 0 for each asset
                         asset_name = asset.get('name', 'Unknown')
-                        asset_value = asset.get('value', 0)
-                        
+                        asset_amount = asset.get('amount', 0) # Use asset amount from wallet detail
+
                         # Encontra o ativo correspondente nos dados de EOY
                         eoy_asset = eoy_assets.get(asset_name)
-                        
-                        if eoy_asset and eoy_asset['value'] > 0:
-                            # Calcula o custo proporcional
-                            asset_proportion = asset_value / eoy_asset['value']
-                            asset_cost = eoy_asset['cost'] * asset_proportion
+
+                        if eoy_asset and eoy_asset.get('amount', 0) > 0:
+                            # Calcula o custo médio unitário do EOY
+                            eoy_total_cost = eoy_asset.get('cost', 0)
+                            eoy_total_amount = eoy_asset.get('amount', 0)
+                            unit_cost = eoy_total_cost / eoy_total_amount
+                            
+                            # Calcula o custo proporcional para a quantidade neste wallet
+                            asset_cost = unit_cost * asset_amount
                         else:
-                            # Se não encontrar o ativo, estima o custo com base na proporção geral
-                            asset_proportion = asset_value / total_value if total_value > 0 else 0
-                            asset_cost = total_cost * asset_proportion
-                        
-                        # Adiciona o custo ao asset
+                            # Fallback: Se não houver dados EOY ou quantidade for zero,
+                            # não podemos calcular custo proporcional. Usar None para indicar.
+                            if eoy_asset:
+                                logging.warning(f"Custo proporcional para {asset_name} na carteira {wallet_detail.get('wallet_name_raw', '')} zerado pois quantidade EOY é 0.")
+                            else:
+                                logging.warning(f"Custo proporcional para {asset_name} na carteira {wallet_detail.get('wallet_name_raw', '')} não encontrado no EOY.") # Mensagem ajustada
+                            asset_cost = None # Sinaliza que o custo não foi encontrado/calculável
+
+                        # Adiciona o custo (ou None) ao asset
                         asset['cost'] = asset_cost
-                    wallet_cost += asset_cost
+                    #wallet_cost += asset_cost # <-- Esta linha estava identada incorretamente antes? Mover para fora do loop de asset.
+
+                    # Custo total da carteira é a soma dos custos proporcionais dos seus ativos (ignorando None)
+                    wallet_cost = sum(a.get('cost', 0) for a in wallet_detail.get('assets', []) if a.get('cost') is not None)
 
                     # Adiciona o custo total da carteira
                     wallet_detail['cost'] = wallet_cost
@@ -671,12 +741,20 @@ class KoinlyProcessor:
             
             for wallet in self.wallet_details:
                 for asset in wallet.get('assets', []):
-                    # Formata o valor com vírgula como separador decimal (formato brasileiro)
-                    value = asset.get('value', 0)
-                    if value < 0.01 and value > 0:
-                        value_str = "0,00"
-                    else:
-                        value_str = f"{value:.2f}".replace('.', ',')
+                    # Pega o CUSTO PROPORCIONAL calculado anteriormente
+                    cost = asset.get('cost') # Usar get sem default para pegar None se existir
+
+                    # Formata o custo ou usa a string de aviso
+                    if cost is None:
+                        cost_str = "Verificar no Koinly - Custo não encontrado"
+                    elif isinstance(cost, (int, float)):
+                        if cost < 0.01 and cost > 0:
+                            cost_str = "0,00"
+                        else:
+                            cost_str = f"{cost:.2f}".replace('.', ',')
+                    else: # Caso inesperado, talvez logar?
+                        cost_str = "Erro ao formatar custo"
+                        logging.error(f"Tipo de custo inesperado para {asset.get('name', '')}: {type(cost)}, valor: {cost}")
 
                     # Usar sempre o valor original extraído do PDF para Qtd
                     raw_amount = asset.get('amount_raw')
@@ -684,31 +762,32 @@ class KoinlyProcessor:
                         qtd_str = str(raw_amount).replace('.', ',')
                     else:
                         qtd_str = str(asset.get('amount', 0)).replace('.', ',')
-                    
-                    ticker_name = asset.get('name', '') # Log Adicionado - Get name
-                    logging.debug(f"Creating final row for Ticker: '{ticker_name}'") # Log Adicionado - Log name
+
+                    ticker_name = asset.get('name', '')
+                    logging.debug(f"Creating final row for Ticker: '{ticker_name}' with value/cost string: {cost_str}")
 
                     assets_rows.append({
-                        'Ticker': ticker_name, # Use the logged name
+                        'Ticker': ticker_name,
                         'Qtd': qtd_str,
-                        'Valor R$ 31/12/2024': value_str,
+                        f'Custo R$ 31/12/{self.report_year}': cost_str,  # Renomeado de Valor para Custo
                         'Discriminação': asset.get('irpf_description', ''),
-                        'Cnpj': ''
                     })
 
             # Criar o dataframe final com as linhas individuais
             self.final_df = pd.DataFrame(assets_rows)
             
-            # Forçar a coluna de valor a ser string para garantir aspas
-            if 'Valor R$ 31/12/2024' in self.final_df.columns:
-                self.final_df['Valor R$ 31/12/2024'] = self.final_df['Valor R$ 31/12/2024'].astype(str)
+            # Forçar a coluna de custo a ser string para garantir aspas
+            custo_column_name = f'Custo R$ 31/12/{self.report_year}' # Nome dinâmico e renomeado
+            if custo_column_name in self.final_df.columns:
+                self.final_df[custo_column_name] = self.final_df[custo_column_name].astype(str)
             if 'code' in self.final_df.columns:
                 self.final_df = self.final_df.drop(columns=['code'])
             logging.info(f"Created final DataFrame with shape {self.final_df.shape}")
         else:
-            # Se não há dados de carteira, crie um DataFrame vazio
-            self.final_df = pd.DataFrame(columns=['Ticker', 'Qtd', 'Valor R$ 31/12/2024',
-                                                'Discriminação', 'Cnpj'])
+            # Se não há dados de carteira, crie um DataFrame vazio com nome de coluna dinâmico
+            custo_column_name = f'Custo R$ 31/12/{self.report_year}' if self.report_year else 'Custo R$ 31/12/????' # Renomeado
+            self.final_df = pd.DataFrame(columns=['Ticker', 'Qtd', custo_column_name,
+                                                'Discriminação'])
             logging.warning("No data available, created empty final DataFrame")
 
         logging.info("DataFrames created")
@@ -735,10 +814,12 @@ class KoinlyProcessor:
         logging.info(f"Saving final output to: {final_path}")
 
         try:
-            # Ensure the DataFrame has the expected columns
-            required_columns = ['Ticker', 'Qtd', 'Valor R$ 31/12/2024', 'Discriminação', 'Cnpj']
+            # Ensure the DataFrame has the expected columns with dynamic year and name
+            custo_column_name = f'Custo R$ 31/12/{self.report_year}' if self.report_year else 'Custo R$ 31/12/????' # Renomeado
+            required_columns = ['Ticker', 'Qtd', custo_column_name, 'Discriminação']
             
             # Check if all required columns exist
+            # Adjust check in case DataFrame was created before year was known (e.g., error early on)
             if all(col in self.final_df.columns for col in required_columns):
                 # Save the final DataFrame with the correct column order
                 self.final_df[required_columns].to_csv(

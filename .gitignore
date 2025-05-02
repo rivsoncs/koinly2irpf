@@ -132,4 +132,9 @@ Exemplos-Reports/
 *.csv
 
 # Outros
-.DS_Store 
+.DS_Store
+
+# Pastas antigas e temporárias
+old/
+old2/
+koinly2irpf/ 
