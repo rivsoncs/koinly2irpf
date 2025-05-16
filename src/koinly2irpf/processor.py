@@ -55,7 +55,11 @@ class KoinlyProcessor:
         self.report_year = None
 
         # Common Patterns
-        self.currency_header_pattern = re.compile(r"^\s*Currency\s+Amount\s+Price\s+Value\s*", re.IGNORECASE | re.DOTALL)
+        self.currency_header_pattern = re.compile(r"^\s*Currency\s+Amount\s+Price\s+Value\s*$", re.IGNORECASE | re.DOTALL)
+        # New pattern for the header with the 'Cost' column
+        self.new_currency_header_pattern = re.compile(r"^\s*(?:Asset|Currency)\s+Amount\s+Price\s+Value\s+Cost\s*$", re.IGNORECASE)
+        # Pattern to capture 'Total cost at 31 Dec YYYY: R$X.XX'
+        self.total_wallet_cost_pattern = re.compile(r"^Total cost at \d{2} Dec \d{4}:\s*(R\$[\d.,]+)", re.IGNORECASE)
 
         # Setup locale (moved from old __init__)
         self._setup_locale()
@@ -460,26 +464,25 @@ class KoinlyProcessor:
         total_value_pattern = re.compile(r"^Total wallet value at", re.IGNORECASE)
         currency_header_pattern = re.compile(r"^\s*(?:Asset|Currency)\s+Amount\s+Price\s+Value\s*", re.IGNORECASE)
 
-        # --- Refined Currency Data Pattern --- #
+        # --- Universal Currency Data Pattern (handles optional Cost column) --- #
         currency_data_pattern = re.compile(
             r"^"
-            # Group 1: Currency Name/Ticker (allow spaces, hyphens, dots, #, /) - Changed to non-greedy any character
-            r"(?P<currency>.+?)" # Handle names like "COMETH ITEMS#123..." more generally
+            r"(?P<currency>.+?)"  # Currency Name/Ticker
             r"\s+"
-            # Group 2: Amount (handles standard and scientific notation)
-            r"(?P<amount>[\d.,]+(?:[eE][-+]?\d+)?)"
+            r"(?P<amount>[\d.,]+(?:[eE][-+]?\d+)?)"  # Amount
             r"\s+"
-            # Group 3: Price (optional R$, handles ., decimal)
-            r"(?:R?\$\s*)?(?P<price>[\d,.-]+(?:[eE][-+]?\d+)?)"
+            r"(?:R?\$\s*)?(?P<price>[()?\d,.-]+(?:[eE][-+]?\d+)?)"  # Price
             r"\s+"
-            # Group 4: Value (optional R$, handles ., decimal)
-            r"(?:R?\$\s*)?(?P<value>[\d,.-]+(?:[eE][-+]?\d+)?)"
-            # Optional trailing description (non-capturing)
-            r"(?:\s+@.*)?"
+            r"(?:R?\$\s*)?(?P<value>[()?\d,.-]+(?:[eE][-+]?\d+)?)"  # Value
+            # Optional Cost Column
+            r"(?:\s+(?:R?\$\s*)?(?P<cost>[()?\d,.-]+(?:[eE][-+]?\d+)?))?"
+            r"(?:\s+@.*)?"  # Optional trailing description (e.g., @ R$1.23 per UNI-V2)
             r"\s*$",
             re.IGNORECASE
         )
-        # --- End Refined Pattern --- #
+        # --- End Universal Pattern --- #
+
+        is_new_format_wallet = False # Flag to indicate if current wallet uses new format with Cost column
 
         # --- Rest of the parsing logic --- (Find start index, loop through lines)
         start_index = -1
@@ -520,7 +523,20 @@ class KoinlyProcessor:
 
             # --- Order of Checks --- #
 
-            # 0. Check Currency Data
+            # 0. Check for "Total cost at DD Mon YYYY: R$X.XX" (New Format Specific)
+            total_cost_match = self.total_wallet_cost_pattern.match(line)
+            if total_cost_match:
+                current_wallet_entry = next((w for w in wallet_details_temp if w['wallet_name_raw'] == current_wallet_info["name"]), None)
+                if current_wallet_entry:
+                    raw_total_cost = total_cost_match.group(1)
+                    total_cost_val = float(self._clean_numeric_str(raw_total_cost))
+                    current_wallet_entry['total_wallet_cost'] = total_cost_val
+                    logging.info(f"  Line {current_line_num_abs}: Found 'Total cost at...' line. Value: {total_cost_val} for wallet {current_wallet_entry['wallet_name_raw']}")
+                else:
+                    logging.warning(f"  Line {current_line_num_abs}: Found 'Total cost at...' line but no current wallet entry to assign it to: {current_wallet_info.get('name')}")
+                continue # This line is processed, move to next line
+
+            # 1. Check Currency Data (using the new universal pattern)
             currency_match = currency_data_pattern.match(line)
             if currency_match:
                 if header_found_for_current_wallet:
@@ -528,61 +544,94 @@ class KoinlyProcessor:
                     try:
                         current_wallet_entry = next((w for w in wallet_details_temp if w['wallet_name_raw'] == current_wallet_info["name"]), None)
                         if not current_wallet_entry:
-                             # If wallet context is somehow lost, try to find the last added wallet
                              if wallet_details_temp:
                                  current_wallet_entry = wallet_details_temp[-1]
                                  logging.warning(f"  Line {current_line_num_abs}: Contexto de carteira perdido, adicionando ativo '{data.get('currency')}' à última carteira encontrada: '{current_wallet_entry.get('wallet_name_raw')}'")
                              else:
                                  logging.error(f"  Line {current_line_num_abs}: Erro CRÍTICO! Dados de moeda sem carteira ativa e nenhuma carteira anterior encontrada.")
                                  continue
-                        # Use .get with default '0' for safety
-                        asset_value = float(self._clean_numeric_str(data.get('value', '0'), remove_currency=True))
+                        
+                        asset_value_str = data.get('value', '0').replace('(', '-').replace(')', '')
+                        asset_value = float(self._clean_numeric_str(asset_value_str, remove_currency=True))
+                        
                         asset_amount_raw = data.get('amount', '0').strip()
                         asset_amount_str = self._clean_numeric_str(asset_amount_raw, remove_currency=False)
                         asset_amount = float(asset_amount_str) if asset_amount_str else 0.0
-                        currency_name = data.get('currency', 'Unknown').strip()
-                        # Clean up potential NFT names captured in currency field
-                        # if '#' in currency_name:
-                        #      currency_name = currency_name.split('#')[0].strip()
-                        logging.debug(f"  Line {current_line_num_abs}:      -> Storing asset with name: '{currency_name}'")
+                        
+                        asset_price_str = data.get('price', '0').replace('(', '-').replace(')', '')
+                        asset_price = float(self._clean_numeric_str(asset_price_str, remove_currency=True))
 
-                        current_wallet_entry['assets'].append({
+                        currency_name = data.get('currency', 'Unknown').strip()
+                        
+                        asset_data = {
                             'name': currency_name,
                             'amount': asset_amount,
-                            'amount_raw': asset_amount_raw,  # valor original como string
+                            'amount_raw': asset_amount_raw,
+                            'price': asset_price, # Storing price
                             'value': asset_value,
-                        })
-                        current_wallet_entry['values'].append(asset_value)
+                        }
+
+                        # Check for and process 'cost' if this wallet is new format OR if cost column was found
+                        raw_cost = data.get('cost')
+                        if raw_cost: # If cost column was matched by regex
+                            asset_cost_str = raw_cost.replace('(', '-').replace(')', '')
+                            asset_data['cost_reported'] = float(self._clean_numeric_str(asset_cost_str, remove_currency=True))
+                            logging.debug(f"  Line {current_line_num_abs}:     + Asset '{currency_name}' has reported cost: {asset_data['cost_reported']}")
+                            # Ensure the wallet is marked as new format if a cost is found
+                            if current_wallet_entry and not current_wallet_entry.get('is_new_format'):
+                                current_wallet_entry['is_new_format'] = True
+                                is_new_format_wallet = True # Update local flag as well
+                                logging.info(f"    Wallet '{current_wallet_entry['wallet_name_raw']}' detected as NEW FORMAT due to reported asset cost.")
+
+                        current_wallet_entry['assets'].append(asset_data)
+                        current_wallet_entry['values'].append(asset_value) # Still useful for some calcs / old logic
                         logging.debug(f"  Line {current_line_num_abs}:     + Asset '{currency_name}' adicionado a '{current_wallet_entry.get('wallet_name_raw')}'")
                     except Exception as e_curr:
-                        logging.warning(f"  Line {current_line_num_abs}: Erro ao processar linha de moeda: '{line}'. Erro: {e_curr}")
+                        logging.warning(f"  Line {current_line_num_abs}: Erro ao processar linha de moeda: '{line}'. Erro: {e_curr} Traceback: {traceback.format_exc()}")
                 else:
                     logging.debug(f"  Line {current_line_num_abs}: Linha parece moeda, mas cabeçalho não encontrado para carteira atual ('{current_wallet_info['name']}'). Ignorando: '{line}'")
                 continue
 
-            # 1. Check Header
-            header_match = currency_header_pattern.match(line)
-            if header_match:
-                logging.info(f"  Line {current_line_num_abs}: Cabeçalho de moeda encontrado.")
+            # 2. Check Header (Old and New)
+            # Must check new_currency_header_pattern BEFORE old one due to specificity
+            new_header_match = self.new_currency_header_pattern.match(line)
+            if new_header_match:
+                logging.info(f"  Line {current_line_num_abs}: NOVO Cabeçalho de moeda (com Custo) encontrado.")
                 header_found_for_current_wallet = True
-                logging.debug(f"      -> Flag header_found_for_current_wallet setada para TRUE")
+                is_new_format_wallet = True # Set flag for this wallet
+                current_wallet_entry = next((w for w in wallet_details_temp if w['wallet_name_raw'] == current_wallet_info["name"]), None)
+                if current_wallet_entry:
+                    current_wallet_entry['is_new_format'] = True
+                logging.debug(f"      -> Flag header_found_for_current_wallet setada para TRUE, is_new_format_wallet para TRUE")
                 continue
 
-            # 2. Check Address Line
+            old_header_match = self.currency_header_pattern.match(line) # Defined in __init__
+            if old_header_match:
+                logging.info(f"  Line {current_line_num_abs}: ANTIGO Cabeçalho de moeda (sem Custo) encontrado.")
+                header_found_for_current_wallet = True
+                is_new_format_wallet = False # Explicitly set to false for old format wallets
+                current_wallet_entry = next((w for w in wallet_details_temp if w['wallet_name_raw'] == current_wallet_info["name"]), None)
+                if current_wallet_entry:
+                    current_wallet_entry['is_new_format'] = False
+                logging.debug(f"      -> Flag header_found_for_current_wallet setada para TRUE, is_new_format_wallet para FALSE")
+                continue
+            
+            # 3. Check Address Line
             address_match = address_pattern.match(line)
             if address_match:
                 last_captured_address = address_match.group(1).strip()
                 logging.debug(f"  Line {current_line_num_abs}: Endereço CAPTURADO (linha separada): {last_captured_address}. Guardado.")
                 continue
 
-            # 3. Check Total Value Line
+            # 4. Check Total Value Line
             if total_value_pattern.match(line):
                 logging.debug(f"  Line {current_line_num_abs}: Linha 'Total wallet value' encontrada, resetando header flag.")
                 header_found_for_current_wallet = False
+                # DO NOT reset is_new_format_wallet here, it's per-wallet
                 logging.debug(f"      -> Flag header_found_for_current_wallet resetada para FALSE (fim carteira)")
                 continue
 
-            # 4. Check Title
+            # 5. Check Title
             title_match = koinly_title_pattern.match(line)
             if title_match:
                 name_part = title_match.group(1).strip() if title_match.group(1) else "Unknown"
@@ -595,6 +644,11 @@ class KoinlyProcessor:
                     identified_blockchain = network_part if network_part else self._identify_blockchain(line)
                     identified_exchange = self._identify_exchange(line)
                     w_type = "Exchange" if identified_exchange != 'NONE' else ("Bitcoin" if identified_blockchain == 'Bitcoin' else "Wallet")
+                    
+                    # Reset wallet-specific flags for the new wallet
+                    is_new_format_wallet = False # Default to old, will be updated by header
+                    header_found_for_current_wallet = False
+
                     current_wallet_info = {
                         "name": cleaned_name,
                         "type": w_type,
@@ -603,8 +657,6 @@ class KoinlyProcessor:
                     }
                     if final_address == last_captured_address: last_captured_address = None
                     logging.debug(f"      -> Novo Contexto: {current_wallet_info}")
-                    header_found_for_current_wallet = False
-                    logging.debug(f"      -> Header flag resetada (novo título)")
                     existing_entry = next((w for w in wallet_details_temp if w['wallet_name_raw'] == line), None)
                     if not existing_entry:
                          wallet_details_temp.append({
@@ -613,7 +665,10 @@ class KoinlyProcessor:
                              'blockchain': identified_blockchain,
                              'exchange': identified_exchange,
                              'address': final_address,
-                             'assets': [], 'values': []
+                             'assets': [], 
+                             'values': [],
+                             'is_new_format': False, # Initialize, will be updated by header
+                             'total_wallet_cost': None # Initialize
                          })
                          logging.debug(f"      -> Nova entrada criada para '{line}'")
                     else:
@@ -629,7 +684,7 @@ class KoinlyProcessor:
                          last_captured_address = None
                 continue
 
-            # 5. Unhandled line
+            # 6. Unhandled line
             logging.debug(f"  Line {current_line_num_abs}: Linha não reconhecida: '{line}'")
 
         # --- Post-processing loop --- (Remains the same)
@@ -670,47 +725,111 @@ class KoinlyProcessor:
                     if not wallet_detail.get('assets'): # Skip wallets with no assets parsed
                         wallet_detail['cost'] = 0
                         wallet_detail['proportion'] = 0
+                        logging.debug(f"Wallet {wallet_detail.get('wallet_name_raw', 'Unknown')} has no assets, setting cost and proportion to 0.")
                         continue
 
                     for asset in wallet_detail.get('assets', []):
-                        asset_cost = 0 # Initialize asset_cost to 0 for each asset
+                        asset_cost = None # Initialize asset_cost to None
                         asset_name = asset.get('name', 'Unknown')
-                        asset_amount = asset.get('amount', 0) # Use asset amount from wallet detail
+                        asset_amount = asset.get('amount', 0)
 
-                        # Encontra o ativo correspondente nos dados de EOY
-                        eoy_asset = eoy_assets.get(asset_name)
-
-                        if eoy_asset and eoy_asset.get('amount', 0) > 0:
-                            # Calcula o custo médio unitário do EOY
-                            eoy_total_cost = eoy_asset.get('cost', 0)
-                            eoy_total_amount = eoy_asset.get('amount', 0)
-                            unit_cost = eoy_total_cost / eoy_total_amount
-                            
-                            # Calcula o custo proporcional para a quantidade neste wallet
-                            asset_cost = unit_cost * asset_amount
+                        # Check if new format and reported cost is available for this asset
+                        if wallet_detail.get('is_new_format') and 'cost_reported' in asset and asset['cost_reported'] is not None:
+                            asset_cost = asset['cost_reported']
+                            logging.debug(f"Using reported cost {asset_cost} for {asset_name} in new format wallet {wallet_detail.get('wallet_name_raw', '')}.")
                         else:
-                            # Fallback: Se não houver dados EOY ou quantidade for zero,
-                            # não podemos calcular custo proporcional. Usar None para indicar.
-                            if eoy_asset:
-                                logging.warning(f"Custo proporcional para {asset_name} na carteira {wallet_detail.get('wallet_name_raw', '')} zerado pois quantidade EOY é 0.")
+                            # Fallback to EOY proportional cost calculation
+                            eoy_asset = eoy_assets.get(asset_name)
+                            if eoy_asset and eoy_asset.get('amount', 0) > 0:
+                                eoy_total_cost = eoy_asset.get('cost', 0)
+                                eoy_total_amount = eoy_asset.get('amount', 0)
+                                unit_cost = eoy_total_cost / eoy_total_amount
+                                asset_cost = unit_cost * asset_amount
+                                logging.debug(f"Calculated EOY proportional cost {asset_cost} for {asset_name} in wallet {wallet_detail.get('wallet_name_raw', '')}.")
                             else:
-                                logging.warning(f"Custo proporcional para {asset_name} na carteira {wallet_detail.get('wallet_name_raw', '')} não encontrado no EOY.") # Mensagem ajustada
-                            asset_cost = None # Sinaliza que o custo não foi encontrado/calculável
+                                if wallet_detail.get('is_new_format'):
+                                    logging.warning(f"Asset {asset_name} in NEW FORMAT wallet {wallet_detail.get('wallet_name_raw', '')} missing 'cost_reported'. EOY fallback: Not found or EOY amount is 0.")
+                                elif eoy_asset:
+                                    logging.warning(f"EOY proportional cost for {asset_name} in wallet {wallet_detail.get('wallet_name_raw', '')} set to None (EOY amount is 0).")
+                                else:
+                                    logging.warning(f"EOY proportional cost for {asset_name} in wallet {wallet_detail.get('wallet_name_raw', '')} set to None (asset not found in EOY list).")
+                                # asset_cost remains None
 
-                        # Adiciona o custo (ou None) ao asset
-                        asset['cost'] = asset_cost
-                    #wallet_cost += asset_cost # <-- Esta linha estava identada incorretamente antes? Mover para fora do loop de asset.
+                        asset['cost'] = asset_cost # Assign the determined cost (either reported or EOY-calculated, or None)
 
-                    # Custo total da carteira é a soma dos custos proporcionais dos seus ativos (ignorando None)
-                    wallet_cost = sum(a.get('cost', 0) for a in wallet_detail.get('assets', []) if a.get('cost') is not None)
-
-                    # Adiciona o custo total da carteira
-                    wallet_detail['cost'] = wallet_cost
+                    # Custo total da carteira é a soma dos custos dos seus ativos (ignorando None)
+                    # Ensure that assets without a calculable cost (None) are treated as 0 for summing wallet_cost
+                    wallet_assets = wallet_detail.get('assets', [])
+                    wallet_cost = sum(a.get('cost', 0) for a in wallet_assets if a.get('cost') is not None)
                     
-                    # Calcula a proporção da carteira no total
-                    wallet_detail['proportion'] = wallet_cost / total_cost if total_cost > 0 else 0
+                    # Store the total calculated cost for the wallet
+                    wallet_detail['cost'] = wallet_cost
+                    logging.debug(f"Total calculated cost for wallet {wallet_detail.get('wallet_name_raw', '')}: {wallet_cost}")
 
-        logging.info("Proportional costs calculated")
+                    # Log total_wallet_cost (from PDF new format) if available, for comparison
+                    if wallet_detail.get('total_wallet_cost') is not None:
+                        logging.info(f"Wallet {wallet_detail.get('wallet_name_raw', '')}: Reported Total Wallet Cost (from PDF): {wallet_detail['total_wallet_cost']:.2f}, Sum of Asset Costs (calculated): {wallet_cost:.2f}")
+                    
+                    # Calcula a proporção da carteira no total EOY cost
+                    if total_cost > 0:
+                        wallet_detail['proportion'] = wallet_cost / total_cost
+                    else:
+                        wallet_detail['proportion'] = 0
+                    logging.debug(f"Wallet {wallet_detail.get('wallet_name_raw', '')} proportion of total EOY cost: {wallet_detail['proportion']:.4f}")
+            else: # This 'else' corresponds to 'if total_value > 0'
+                logging.warning("Total EOY value is zero or less, cannot calculate proportional costs based on EOY data. Asset costs might be incomplete if not reported directly.")
+                # If EOY total value is zero, still try to use reported costs for new format wallets
+                for wallet_detail in self.wallet_details:
+                    if not wallet_detail.get('assets'):
+                        wallet_detail['cost'] = 0
+                        continue
+                    
+                    current_wallet_cost = 0
+                    if wallet_detail.get('is_new_format'):
+                        for asset in wallet_detail.get('assets', []):
+                            if 'cost_reported' in asset and asset['cost_reported'] is not None:
+                                asset['cost'] = asset['cost_reported']
+                                current_wallet_cost += asset['cost']
+                                logging.debug(f"Using reported cost {asset['cost']} for {asset.get('name', 'Unknown')} in new format wallet {wallet_detail.get('wallet_name_raw', '')} (EOY total value zero).")
+                            else:
+                                asset['cost'] = None # No EOY fallback possible here, and no reported cost
+                                logging.warning(f"Asset {asset.get('name', 'Unknown')} in new format wallet {wallet_detail.get('wallet_name_raw', '')} missing 'cost_reported', and EOY total value is zero. Cost set to None.")
+                        wallet_detail['cost'] = current_wallet_cost
+                    else: # Old format wallet and no EOY data to rely on
+                        for asset in wallet_detail.get('assets', []):
+                            asset['cost'] = None # Cannot determine cost
+                        wallet_detail['cost'] = 0
+                        logging.warning(f"Wallet {wallet_detail.get('wallet_name_raw', '')} (old format) has no EOY data for cost calculation as EOY total value is zero. All asset costs set to None, wallet cost to 0.")
+                    # Proportion cannot be meaningfully calculated if total_cost (from EOY) is zero or EOY items are missing
+                    wallet_detail['proportion'] = 0 
+        else: # This 'else' corresponds to 'if self.end_of_year_items:'
+            logging.warning("No End of Year items found. Proportional costs cannot be calculated based on EOY data.")
+            # Attempt to use reported costs for new format wallets even if EOY is missing
+            for wallet_detail in self.wallet_details:
+                if not wallet_detail.get('assets'):
+                    wallet_detail['cost'] = 0
+                    wallet_detail['proportion'] = 0
+                    continue
+
+                current_wallet_cost = 0
+                if wallet_detail.get('is_new_format'):
+                    for asset in wallet_detail.get('assets', []):
+                        if 'cost_reported' in asset and asset['cost_reported'] is not None:
+                            asset['cost'] = asset['cost_reported']
+                            current_wallet_cost += asset['cost']
+                            logging.debug(f"Using reported cost {asset['cost']} for {asset.get('name', 'Unknown')} in new format wallet {wallet_detail.get('wallet_name_raw', '')} (No EOY data).")
+                        else:
+                            asset['cost'] = None # No EOY fallback, and no reported cost
+                            logging.warning(f"Asset {asset.get('name', 'Unknown')} in new format wallet {wallet_detail.get('wallet_name_raw', '')} missing 'cost_reported', and no EOY data. Cost set to None.")
+                    wallet_detail['cost'] = current_wallet_cost
+                else: # Old format wallet and no EOY data
+                    for asset in wallet_detail.get('assets', []):
+                        asset['cost'] = None # Cannot determine cost
+                    wallet_detail['cost'] = 0
+                    logging.warning(f"Wallet {wallet_detail.get('wallet_name_raw', '')} (old format) has no EOY data for cost calculation. All asset costs set to None, wallet cost to 0.")
+                wallet_detail['proportion'] = 0 # No EOY total to base proportion on
+
+        logging.info("Proportional costs calculation step completed.")
     
     def _create_dataframes(self):
         """Create DataFrames from the processed data."""
@@ -986,6 +1105,10 @@ class KoinlyProcessor:
             'mercadobitcoin': 'Mercado Bitcoin',
             'mercadobitcoin.com.br': 'Mercado Bitcoin',
             'mb': 'Mercado Bitcoin',
+            'mercado': 'Mercado Bitcoin',
+            'btg': 'BTG Pactual',
+            'btg pactual': 'BTG Pactual',
+            'btgdigital': 'BTG Pactual',
             'foxbit': 'Foxbit',
             'foxbit.com.br': 'Foxbit',
             'novadax': 'NovaDAX',
